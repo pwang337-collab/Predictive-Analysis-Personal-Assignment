@@ -33,5 +33,21 @@ Develop a reproducible predictive pipeline with evaluation focused on imbalanced
 - Preprocessing includes numeric coercion, median imputation, and scaling
 - Model: class-balanced logistic regression pipeline
 
+## Environment Specification
+
+- Python: 3.12+
+- OS tested: macOS
+- Dependencies are listed in `requirements.txt`.
+
+## Setup Instructions
+
+```bash
+cd "/Users/godwpx/Desktop/Predictive Analysis/Personal Assignment"
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+python -m ipykernel install --user --name aps-coursework --display-name "Python (aps-coursework)"
+
 ## Dataset Link
 - https://www.openml.org/search?type=data&sort=runs&id=41138

@@ -1,0 +1,3 @@
+original_shape=(76000, 170)
+working_shape=(50000, 170)
+metrics={'test_accuracy': 0.9722, 'test_f1_macro': 0.7649625039102461, 'test_recall_pos': 0.9171270718232044, 'test_precision_pos': 0.38694638694638694}

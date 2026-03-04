@@ -1,0 +1,10 @@
+dataset=APSFailure (OpenML)
+original_shape=(76000, 170)
+target_distribution={'neg': 74625, 'pos': 1375}
+train_shape=(60800, 170)
+test_shape=(15200, 170)
+best_model=log_reg_balanced
+test_accuracy=0.974079
+test_f1_macro=0.774433
+test_recall_pos=0.920000
+test_precision_pos=0.404800

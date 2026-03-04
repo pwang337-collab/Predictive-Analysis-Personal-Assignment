@@ -41,7 +41,7 @@ Develop a reproducible predictive pipeline with evaluation focused on imbalanced
 
 ## Setup Instructions
 
-```bash
+bash
 cd "/Users/godwpx/Desktop/Predictive Analysis/Personal Assignment"
 python3 -m venv .venv
 source .venv/bin/activate

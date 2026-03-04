@@ -11,6 +11,9 @@ The project builds a binary classification model to predict APS system failure (
 - Original size: 76,000 rows, 170 features
 - Task type: Binary classification
 
+## Dataset Link
+- https://www.openml.org/search?type=data&sort=runs&id=41138
+
 ## Objective
 Develop a reproducible predictive pipeline with evaluation focused on imbalanced-class performance, especially positive-class recall for failure detection.
 
@@ -41,13 +44,10 @@ Develop a reproducible predictive pipeline with evaluation focused on imbalanced
 
 ## Setup Instructions
 
-bash
+```bash
 cd "/Users/godwpx/Desktop/Predictive Analysis/Personal Assignment"
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
-python -m ipykernel install --user --name aps-coursework --display-name "Python (aps-coursework)"
-
-## Dataset Link
-- https://www.openml.org/search?type=data&sort=runs&id=41138
+python -m ipykernel install --user --name aps-coursework --display-name "Python (aps-coursework)" 

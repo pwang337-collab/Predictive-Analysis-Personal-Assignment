@@ -2,295 +2,62 @@
 
 ## 1. Obtain a dataset and frame the predictive problem
 
-### Dataset selection
-I selected the **APS Failure at Scania Trucks** dataset from OpenML (`APSFailure`). This dataset has an **original size of 76,000 observations** and 170 features, which satisfies the project requirement to use a dataset whose original size is between 50,000 and 100,000 rows.
+I selected the APS Failure at Scania Trucks dataset from OpenML because its original size is 76,000 observations, which fits the required 50,000 to 100,000 range without any ambiguity. The target variable records whether a case is a failure event (`pos`) or a non-failure event (`neg`), so the task is a binary classification problem rather than regression. The dataset is strongly imbalanced, with far more negative than positive cases, and this imbalance shapes both modelling strategy and evaluation logic.
 
-The target contains two labels:
-- `neg` (no APS-related failure)
-- `pos` (APS-related failure)
+The predictive objective is to identify failure cases reliably enough for maintenance screening and triage. In this context, missing a real failure is usually more expensive than raising a false alarm, so the primary success criterion is positive-class recall. Accuracy is still reported, but it is not treated as decisive because it can be inflated by majority-class dominance. I therefore evaluate the model with a combination of accuracy, macro F1, positive recall, and positive precision. This creates a balanced view of overall performance, class fairness in scoring, and operational trade-offs.
 
-The class distribution is highly imbalanced:
-- `neg`: 74,625
-- `pos`: 1,375
+At framing stage, I assumed that the historical labels are sufficiently reliable for supervised learning, that the feature set contains meaningful signal, and that train and test splits represent comparable distributions. I also acknowledged early limitations: severe imbalance can hide minority-class failure modes, missing values can distort modelling if not handled consistently, and model output should support—not replace—human maintenance decisions.
 
-### Target variable and prediction type
-- **Target variable**: APS failure label (`pos` vs `neg`)
-- **Prediction type**: **binary classification**
-
-This is not a regression problem because the outcome is categorical, not continuous.
-
-### Success metrics and constraints
-Because this is an imbalanced failure-detection task, I used multiple metrics with one primary objective.
-
-Primary metric:
-- **Recall on positive class (`pos`)**: maximize detection of true failures.
-
-Secondary metrics:
-- **Precision on positive class**: control false alarms.
-- **Macro F1**: class-balanced summary performance.
-- **Accuracy**: overall performance (reported but not used alone for decision-making).
-
-Constraints considered:
-- **Operational constraint**: false negatives (missed failures) are likely costlier than false positives.
-- **Computational constraint**: runtime must be practical in the available environment.
-- **Interpretability constraint**: model should remain explainable enough for maintenance stakeholders.
-
-### Assumptions and limitations at framing stage
-Key assumptions:
-1. The provided features contain predictive signal for APS failure.
-2. Historical failure labels are reliable enough for supervised learning.
-3. Train/test distributions are sufficiently similar for holdout evaluation to be meaningful.
-
-Early limitations:
-1. Severe class imbalance can distort standard metrics.
-2. Dataset may include missing or malformed values requiring robust preprocessing.
-3. Model output alone should not replace maintenance judgement.
-
-### Agent tooling expectation: plan
-Plan executed with agent support:
-1. Ask the agent to identify a valid dataset in the required size range.
-2. Ask the agent to scaffold a reproducible notebook and report structure.
-3. Ask the agent to propose model/pipeline choices for imbalanced classification.
-4. Ask the agent to generate evaluation outputs and reporting artifacts.
-
-What I verified myself:
-1. Dataset **original** row count is within rubric requirement (76,000).
-2. Target definition and metric priorities are aligned to failure-detection risk.
-3. Pipeline avoids obvious leakage and uses stratified split discipline.
-4. Report claims are consistent with generated metrics.
-
----
+For agent tooling, I followed an explicit plan. I used the agent to identify and load an eligible dataset, scaffold a reproducible notebook and report, and propose a first-pass pipeline suitable for imbalanced classification. I then verified core decisions myself by checking original dataset size, class distribution, metric alignment with business objective, and leakage-safe preprocessing discipline. I treated agent suggestions as drafts that required empirical validation before inclusion.
 
 ## 2. Explore the data to gain insights
 
-### Concise visual EDA
-EDA focused on checks most relevant to modelling risk.
+Exploration focused on concise checks that directly influence model reliability. I first inspected class distribution and confirmed extreme imbalance, which immediately justified recall-oriented evaluation and imbalance-aware modelling. I then reviewed feature quality by coercing to numeric and observing missingness introduced by malformed values. This validated the need for robust imputation rather than row deletion, because dropping records aggressively could remove scarce positive examples.
 
-1. **Target distribution plot**
-   A class-count plot confirmed extreme imbalance (`pos` is rare). This justified recall-focused evaluation and class-weighted modelling.
+I also examined feature scale differences and outlier risk in high-dimensional numeric space. These checks supported scaling for linear models and reinforced the need to keep preprocessing inside a single pipeline. A key leakage risk identified at this stage was applying imputation or scaling before splitting the data; doing so would allow test information to influence training transformations and overstate performance.
 
-2. **Missingness inspection**
-   Numeric coercion introduced `NaN` where malformed values existed. Missingness was therefore expected and explicitly handled in the modelling pipeline.
-
-3. **Basic feature sanity**
-   The dataset has many numeric variables with potentially different scales, supporting use of scaling for linear models.
-
-4. **Outlier and range awareness**
-   Given sensor-like variables and high dimensionality, robust preprocessing was preferred over aggressive row deletion.
-
-### Leakage risks and modelling pitfalls identified
-Potential pitfalls identified during EDA and design:
-1. **Leakage risk** if imputation/scaling were performed before splitting.
-2. **Metric trap** if model selection relied only on accuracy.
-3. **Class imbalance bias** causing trivial majority-class predictions.
-4. **Overconfidence from one metric** without class-specific diagnostics.
-
-### Data quality issues noted
-1. Non-numeric entries in feature columns required coercion.
-2. Missing values needed imputation strategy.
-3. Minority class sparsity makes precision unstable and threshold-sensitive.
-
-### Agent tooling expectation: validation of EDA
-How agent help was used:
-- The agent proposed EDA checks and chart ideas (class balance, split checks, confusion matrix).
-
-How I validated correctness:
-1. Confirmed class counts directly from `value_counts()`.
-2. Confirmed that target imbalance interpretation matched raw counts.
-3. Checked that visual conclusions (imbalance, need for recall emphasis) were consistent with data.
-4. Rejected generic EDA claims that were not directly supported by outputs.
-
----
+The agent was used to suggest EDA checks and plotting sequence, but every interpretation was validated against direct outputs such as class counts and distribution summaries. Whenever a narrative conclusion appeared too generic, I cross-checked it against concrete dataset evidence before preserving it in the report. This was especially important for imbalance-related conclusions, where casual interpretation can be misleading.
 
 ## 3. Prepare the data
 
-### Reproducible preprocessing pipeline
-I implemented preprocessing inside a single scikit-learn `Pipeline`:
-1. `SimpleImputer(strategy='median')`
-2. `StandardScaler()`
-3. `LogisticRegression(class_weight='balanced')`
+Data preparation was implemented with reproducibility and split discipline as first principles. I converted all features to numeric with coercion so invalid values became missing values, then encoded the target as binary (`pos` mapped to 1 and `neg` mapped to 0). To keep runtime practical while preserving project validity, I used a stratified 50,000-row working subset derived from the original 76,000-row dataset. This maintained class proportion while reducing execution time.
 
-This ensures transformations are fit on training data and applied consistently.
+I used a stratified 80/20 train-test split with a fixed random seed. Stratification ensured minority representation in both partitions, while fixed seed preserved reproducibility of results. All preprocessing was embedded in a scikit-learn pipeline with median imputation followed by scaling and model fitting. This prevented leakage by ensuring transformations were learned only from training data and then applied consistently to holdout data.
 
-### Split discipline (train/validation/test)
-- Used **stratified train/test split** (80/20) to preserve class distribution.
-- For model comparison in earlier iterations, stratified validation logic was used.
-- Final reported metrics come from holdout test predictions.
-
-This discipline reduces evaluation bias and preserves minority representation.
-
-### Data validation checks demonstrated
-Checks performed:
-1. Verified shapes after load, conversion, sampling, and splitting.
-2. Verified class proportions before and after split.
-3. Verified target encoding (`pos -> 1`, `neg -> 0`).
-4. Verified no pipeline step fit on test data.
-
-### Agent tooling expectation: documenting agent-suggested steps and verification
-Agent-suggested steps used:
-- Median imputation for missing values.
-- Class-weight balancing in logistic regression.
-- Stratified split and recall/precision reporting.
-
-Verification performed:
-1. Confirmed imputer and scaler are inside pipeline (not pre-fit globally).
-2. Confirmed class weighting improves minority recall relative to imbalance-aware objective.
-3. Confirmed split remains stratified and reproducible with fixed random seed.
-4. Confirmed generated code runs and produces coherent metrics.
-
----
+Data validation checks were performed at each stage: shape checks before and after transformation, class-ratio checks before and after split, target encoding checks, and pipeline-order checks. The agent suggested several cleaning and feature-processing steps, but I only kept steps that were demonstrably appropriate for APS Failure and consistent with split discipline. In particular, I verified that no transformation was fit on test data outside the pipeline.
 
 ## 4. Explore different models and shortlist the best ones
 
-### Baseline model
-A baseline logistic regression model was established as an interpretable, computationally efficient starting point for binary classification.
+I established a baseline with logistic regression because it is stable, interpretable, and computationally efficient for high-dimensional tabular binary classification. I then explored alternative model families in earlier iterations, including tree-based approaches, to test whether nonlinearity would materially improve objective-relevant metrics. In this environment, heavier alternatives raised runtime and reproducibility trade-offs, so the final report retains the strongest reproducible path with balanced logistic regression while documenting the comparative logic used in shortlisting.
 
-### Model comparison
-I compared at least two model families during development:
-1. **Logistic Regression (balanced)**
-2. **Tree-based alternative(s)** explored in earlier runs for nonlinearity handling
+Model shortlisting was not based on intuition or isolated metrics. I prioritized evidence from objective-aligned outputs, particularly positive recall and macro F1, then checked precision to understand alert burden. Accuracy was retained as contextual information but never treated as a sole decision criterion. This evidence-led shortlisting process ensured that model choice remained aligned with failure-detection priorities rather than generic benchmark habits.
 
-Given environment runtime constraints and project timeline, the final reproducible path retained the logistic pipeline as the primary implementation.
-
-### Include at least one “modern” approach
-A modern non-linear approach (ensemble/tree-based exploration) was included in experimentation, then narrowed due runtime and reproducibility constraints. The final submission emphasizes the robust, explainable pipeline that could be rerun reliably.
-
-### Shortlisting rationale with evidence
-Shortlisting criteria:
-1. Minority-class recall behaviour.
-2. Macro F1 balance under imbalance.
-3. Runtime feasibility and reproducibility.
-4. Interpretability for maintenance stakeholders.
-
-Observed final run (logistic pipeline) on working data:
-- Test accuracy: **0.9722**
-- Test macro F1: **0.7650**
-- Positive recall: **0.9171**
-- Positive precision: **0.3869**
-
-These results support using the logistic pipeline for high-recall screening.
-
-### Agent tooling expectation: verify architecture/hyperparameter suggestions with experiments
-Agent suggestions were treated as hypotheses, not conclusions.
-
-Verification approach:
-1. Executed suggested pipeline and compared metrics.
-2. Rejected settings that improved accuracy but harmed positive recall objective.
-3. Preferred configurations supported by empirical outputs, not textual plausibility.
-
----
+The agent proposed architecture and parameter ideas, but I verified these proposals through execution and metric comparison. If a suggestion improved headline accuracy while weakening failure recall, it was rejected. This experimental verification step was essential because the same configuration can appear good on one metric and poor on the one that actually matters in practice.
 
 ## 5. Fine-tune and evaluate
 
-### Tuning strategy
-Given time/runtime constraints, tuning was lightweight and objective-driven:
-1. Used class weighting (`balanced`) to shift decision boundary toward minority detection.
-2. Ensured robust preprocessing in pipeline.
-3. Used holdout evaluation with class-specific metrics.
+Tuning was lightweight and objective-driven due runtime constraints, but still methodologically sound. The most important tuning decision was to use class-balanced weighting in logistic regression so the minority failure class received proportionally higher influence during optimization. Combined with stable preprocessing and stratified splitting, this produced a robust high-recall baseline suitable for screening.
 
-Further tuning candidates (for next iteration):
-- Regularization strength grid.
-- Threshold tuning using validation PR trade-off.
-- Cost-sensitive objective functions.
+Evaluation included a classification report and confusion matrix in addition to scalar metrics. The observed test results were accuracy 0.9722, macro F1 0.7650, positive recall 0.9171, and positive precision 0.3869. These values indicate that the model catches most true failures but raises a substantial number of false alarms. That trade-off is expected under imbalance when recall is prioritized and should be interpreted against operational tolerance for inspection workload.
 
-### Robust evaluation and error analysis
-Evaluation outputs included:
-1. Accuracy and macro F1.
-2. Positive recall and precision.
-3. Classification report.
-4. Confusion matrix.
-
-Error analysis summary:
-- High recall indicates most true failures are detected.
-- Lower precision indicates substantial false alarms.
-- This is an expected trade-off in rare-event detection when recall is prioritized.
-
-Interpretation in business terms:
-- Model is suitable for screening or triage where missing failures is expensive.
-- Additional threshold tuning is needed if false-positive workload is too high.
-
-### Agent tooling expectation: explicit agent-made mistake caught and corrected
-One explicit agent mistake I caught:
-
-- **Mistake**: An earlier generated direction emphasized accuracy and generic performance summaries that were not sufficient for this imbalanced failure task.
-- **Why it was wrong**: Accuracy can be inflated by majority-class dominance and can hide poor failure detection.
-- **Correction I made**:
-  1. Reframed objective around **positive recall**.
-  2. Required reporting of precision, recall, and macro F1.
-  3. Kept class balancing in model setup.
-  4. Rewrote conclusions to focus on operational trade-offs, not just high accuracy.
-
-A second correction was project-specific:
-- **Mistake**: A previous dataset candidate (MNIST-family example) was too close to class examples.
-- **Correction**: Switched to APS Failure with original size 76,000 and domain-relevant context.
-
----
+I also include one explicit agent-made mistake that I caught and corrected, as required. An earlier agent draft emphasized high accuracy and generic model quality language that did not sufficiently account for imbalance risk. I corrected this by re-centering evaluation on positive recall, requiring macro F1 and precision reporting, and revising interpretation around failure-detection cost trade-offs rather than overall correctness alone. A second correction occurred when a previous dataset choice was too close to class examples; I replaced it with APS Failure to ensure originality and rubric compliance.
 
 ## 6. Present the final solution
 
-### Final model selection with rationale
-Final selected model:
-- **Pipeline:** median imputer + scaler + balanced logistic regression.
+The final model is a reproducible pipeline consisting of median imputation, feature scaling, and class-balanced logistic regression. I selected this solution because it delivers strong recall for failure detection, remains transparent enough to explain clearly, and runs reliably in the available environment. The model is appropriate for early-warning support and triage prioritization, but it is not a standalone decision authority.
 
-Rationale:
-1. Strong positive recall aligned with failure-detection objective.
-2. Stable and reproducible pipeline behaviour.
-3. Transparent modelling approach suitable for coursework explanation.
-4. Practical runtime compared to heavier alternatives.
+Limitations remain important. Precision is relatively low for positive predictions, so the model may increase inspection workload through false alarms. Hyperparameter search was limited, threshold optimization was not fully explored, and evaluation was performed on a holdout split rather than repeated external validation. These limitations do not invalidate the result, but they define the boundary of what can be claimed.
 
-### Limitations, risks, and next steps
-Limitations:
-1. Precision is relatively low for positive predictions.
-2. Hyperparameter search was not exhaustive.
-3. Evaluation is from one holdout split; broader validation could strengthen confidence.
-4. Working training subset was used for runtime practicality.
+The immediate next step is operating-threshold tuning to reach a more practical recall-precision balance for specific maintenance capacity constraints. Additional follow-up includes comparing imbalance-aware ensemble methods, retraining on the full 76,000 rows after model selection, and adding monitoring rules for recall drift, alert-rate drift, and class-distribution drift in deployment.
 
-Risks:
-1. High false-positive volume may stress maintenance workflows.
-2. Data drift over time can reduce recall if model is not monitored.
-3. Misuse risk if model is treated as final decision authority.
-
-Next steps:
-1. Tune classification threshold to target acceptable recall/precision operating point.
-2. Compare with additional imbalance-aware models.
-3. Retrain final selected pipeline on full 76,000 rows.
-4. Add monitoring plan (recall drift, alert rate, class-ratio drift).
-5. Add interpretability outputs for stakeholder trust.
-
-### Short model-card style summary
-**What it is for**
-- Early screening of likely APS failure cases to support maintenance triage.
-
-**What it is not for**
-- Not a standalone decision system for maintenance actions without human review.
-
-**Data provenance and constraints**
-- Source: OpenML APSFailure dataset.
-- Original size: 76,000 rows, 170 features.
-- Strong class imbalance (`pos` rare), requiring imbalance-aware evaluation.
-
-**Evaluation summary and caveats**
-- Test accuracy: 0.9722
-- Test macro F1: 0.7650
-- Positive recall: 0.9171
-- Positive precision: 0.3869
-
-Caveat: model prioritizes recall and therefore produces more false positives. Deployment should include threshold policy and workload planning.
-
----
-
-## References
-
-- OpenML: APS Failure at Scania Trucks.
-- Scikit-learn documentation (pipelines, preprocessing, logistic regression, metrics).
-- He, H., and Garcia, E. (2009). Learning from Imbalanced Data.
+In model-card terms, this model is for identifying likely APS failures early so human teams can prioritize diagnostics. It is not for autonomous maintenance decisions. Data provenance is OpenML APS Failure with known imbalance constraints, and evaluation should always be interpreted with caveats about false-positive burden under recall-oriented objectives.
 
 ## Additional verification details (supporting evidence)
 
-To make verification explicit, I kept a short evidence checklist during the workflow and used it to validate every major claim in the report. First, I confirmed dataset eligibility by checking the original OpenML row count before any sampling decisions. This prevented the common mistake of meeting row-count requirements only through engineered subsets from very small sources. Second, I validated the target mapping by inspecting pre- and post-encoding class counts, ensuring that `pos` consistently maps to 1 throughout metrics and confusion-matrix outputs.
+To keep the report defensible, I maintained a verification checklist throughout the workflow. I verified original dataset eligibility before any sampling decisions, confirmed class mapping consistency from raw labels to encoded target, and checked that preprocessing order remained imputation then scaling then model fitting. I also cross-checked that every metric quoted in the report matched generated summary files so narrative and outputs remained synchronized.
 
-Third, I checked that pipeline order is correct: imputation before scaling, scaling before model fitting. This matters because scaling with unresolved missing values can fail silently in some custom workflows and can produce inconsistent handling across train and test if not pipelined correctly. Fourth, I verified that evaluation metrics are calculated against the same test split and that metric definitions are consistent with the objective, especially for positive recall.
+I added two process safeguards for future iterations. First, any new model must be evaluated on the same split and metric set before comparison claims are made. Second, any threshold adjustment must report both recall and precision changes together, preventing one-sided optimization narratives. These safeguards reduce metric cherry-picking and keep future refinements aligned with the failure-detection objective.
 
-I also validated narrative consistency between notebook outputs and report text. Any metric stated in the report appears in the generated summary artifacts, reducing the risk of copy/paste drift between experimentation and write-up. Where model claims are directional (for example, recall-precision trade-off), they are tied to confusion matrix behaviour and class imbalance context rather than generic statements.
+## References
 
-Finally, I documented two process-level safeguards for future extension: (1) if a new model is added, it must be evaluated under the same split and metric set before comparison; (2) if threshold changes are introduced, both recall and precision changes must be reported together, not individually. These safeguards keep future iterations aligned with the same decision objective and prevent metric cherry-picking.
+OpenML APS Failure dataset documentation and scikit-learn documentation for preprocessing, logistic regression, and classification metrics were used as implementation references. The imbalance-aware evaluation perspective is also consistent with established work on learning from imbalanced data.
